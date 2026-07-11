@@ -212,6 +212,7 @@ local function send_message(a, registry, context_mod, provider_mod)
       on_done = function()
         agent_mod.add_message(a, 'assistant', response_text)
         append_history(a.buf, { '' })
+        require('thorny.persist').save_agent(a)
       end,
       on_error = function(msg)
         append_history(a.buf, { '[error: ' .. msg .. ']', '' })

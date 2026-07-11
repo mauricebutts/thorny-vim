@@ -108,6 +108,16 @@ function M.setup(config)
     end)
   end, {})
 
+  -- Auto-save all agents on Neovim exit
+  vim.api.nvim_create_autocmd('VimLeavePre', {
+    callback = function()
+      local p2 = persist()
+      for _, a in ipairs(registry().list_agents()) do
+        p2.save_agent(a)
+      end
+    end,
+  })
+
   -- Global keymaps (non-buffer-local)
   vim.keymap.set('n', '<leader>an', ':ThornyNew<CR>',    { noremap = true, silent = true, desc = 'Thorny: new agent' })
   vim.keymap.set('n', '<leader>as', ':ThornySwitch<CR>', { noremap = true, silent = true, desc = 'Thorny: switch agent' })
