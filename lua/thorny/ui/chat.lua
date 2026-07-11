@@ -247,28 +247,19 @@ function M.open(a, registry, context_mod, provider_mod)
     }
   end
 
-  -- History area is read-only; input area unlocks on InsertEnter
+  -- History area is read-only. Any insert-mode key jumps cursor to the
+  -- input area and unlocks the buffer; InsertLeave locks it back.
   vim.bo[bufnr].modifiable = false
 
-  -- Allow insert mode only when cursor is below the separator
-  vim.api.nvim_create_autocmd('InsertEnter', {
-    buffer = bufnr,
-    callback = function()
-      local sep = get_separator_line(bufnr)
-      local cursor_line = vim.api.nvim_win_get_cursor(0)[1] - 1  -- 0-based
-      if sep and cursor_line <= sep then
-        vim.cmd('stopinsert')
-      else
-        vim.bo[bufnr].modifiable = true
-      end
-    end,
-  })
+  local function jump_to_input()
+    vim.bo[bufnr].modifiable = true
+    local line_count = vim.api.nvim_buf_line_count(bufnr)
+    vim.api.nvim_win_set_cursor(0, { line_count, vim.fn.col('$') })
+  end
 
   vim.api.nvim_create_autocmd('InsertLeave', {
     buffer = bufnr,
-    callback = function()
-      vim.bo[bufnr].modifiable = false
-    end,
+    callback = function() vim.bo[bufnr].modifiable = false end,
   })
 
   -- Initial buffer contents
@@ -290,6 +281,14 @@ function M.open(a, registry, context_mod, provider_mod)
 
   -- Keymaps (buffer-local, normal mode)
   local opts = { buffer = bufnr, noremap = true, silent = true }
+
+  -- All insert-mode entry keys jump to the input area instead of editing in place
+  for _, key in ipairs({ 'i', 'I', 'a', 'A', 'o', 'O', 's', 'S' }) do
+    vim.keymap.set('n', key, function()
+      jump_to_input()
+      vim.cmd('startinsert!')  -- 'A' behaviour: cursor at end of line
+    end, opts)
+  end
 
   vim.keymap.set('n', '<CR>', function()
     send_message(a, registry, context_mod, provider_mod)
