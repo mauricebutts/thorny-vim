@@ -126,6 +126,16 @@ function M.stream(messages, system, tools, profile, callbacks)
     end
   end
 
+  -- Write API key to a temp curl config file so it never appears in ps aux
+  local tmpfile = os.tmpname()
+  do
+    local f = io.open(tmpfile, 'w')
+    if f then
+      f:write('header = "x-api-key: ' .. profile.api_key .. '"\n')
+      f:close()
+    end
+  end
+
   local args
   if M._curl_cmd ~= 'curl' then
     -- test mode: run the fake script directly, ignore all other args
@@ -137,7 +147,7 @@ function M.stream(messages, system, tools, profile, callbacks)
       'https://api.anthropic.com/v1/messages',
       '-H', 'Content-Type: application/json',
       '-H', 'anthropic-version: 2023-06-01',
-      '-H', 'x-api-key: ' .. profile.api_key,
+      '--config', tmpfile,
       '-d', body,
     }
   end
@@ -147,6 +157,7 @@ function M.stream(messages, system, tools, profile, callbacks)
     args  = args,
     stdio = { nil, stdout, stderr },
   }, function(code)
+    os.remove(tmpfile)  -- delete key file as soon as curl exits
     stdout:close()
     stderr:close()
     handle:close()
