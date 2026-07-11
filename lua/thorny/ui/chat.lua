@@ -4,6 +4,13 @@ local M = {}
 local SEPARATOR = string.rep('─', 60)
 local INPUT_PROMPT = '> '
 
+-- Temporarily enable modifiable, run fn, then restore to false
+local function with_modifiable(bufnr, fn)
+  vim.bo[bufnr].modifiable = true
+  fn()
+  vim.bo[bufnr].modifiable = false
+end
+
 -- Returns the line index (0-based) of the input separator in the buffer
 local function get_separator_line(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -34,7 +41,9 @@ end
 local function reset_input(bufnr)
   local sep = get_separator_line(bufnr)
   if not sep then return end
-  vim.api.nvim_buf_set_lines(bufnr, sep + 1, -1, false, { INPUT_PROMPT })
+  with_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, sep + 1, -1, false, { INPUT_PROMPT })
+  end)
   -- move cursor to end of input line
   local win = vim.fn.bufwinid(bufnr)
   if win ~= -1 then
@@ -47,7 +56,9 @@ end
 local function append_history(bufnr, lines)
   local sep = get_separator_line(bufnr)
   if not sep then return end
-  vim.api.nvim_buf_set_lines(bufnr, sep, sep, false, lines)
+  with_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, sep, sep, false, lines)
+  end)
 end
 
 -- Appends a text fragment to the last history line (for streaming)
@@ -66,7 +77,9 @@ function M.append_text(a, text)
   -- Handle newlines in the token by splitting
   local fragment = last .. text
   local new_lines = vim.split(fragment, '\n', { plain = true })
-  vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx + 1, false, new_lines)
+  with_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx + 1, false, new_lines)
+  end)
 end
 
 -- Renders a pending edit block in the history area
@@ -234,7 +247,32 @@ function M.open(a, registry, context_mod, provider_mod)
     }
   end
 
+  -- History area is read-only; input area unlocks on InsertEnter
+  vim.bo[bufnr].modifiable = false
+
+  -- Allow insert mode only when cursor is below the separator
+  vim.api.nvim_create_autocmd('InsertEnter', {
+    buffer = bufnr,
+    callback = function()
+      local sep = get_separator_line(bufnr)
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1] - 1  -- 0-based
+      if sep and cursor_line <= sep then
+        vim.cmd('stopinsert')
+      else
+        vim.bo[bufnr].modifiable = true
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd('InsertLeave', {
+    buffer = bufnr,
+    callback = function()
+      vim.bo[bufnr].modifiable = false
+    end,
+  })
+
   -- Initial buffer contents
+  vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.list_extend({
     '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode,
     '',
@@ -242,6 +280,7 @@ function M.open(a, registry, context_mod, provider_mod)
     SEPARATOR,
     INPUT_PROMPT,
   })))
+  vim.bo[bufnr].modifiable = false
 
   -- Open in a split
   vim.cmd('vsplit')
