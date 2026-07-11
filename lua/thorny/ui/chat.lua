@@ -246,6 +246,16 @@ function M.open(a, registry, context_mod, provider_mod)
     M.apply_pending_edit(a)
   end, opts)
 
+  vim.keymap.set('n', '<leader>ac', function()
+    local picker_mod = require('thorny.ui.picker')
+    picker_mod.pick_context_files(vim.fn.getcwd(), function(file)
+      a.pinned_files = a.pinned_files or {}
+      table.insert(a.pinned_files, file)
+      append_history(bufnr, { '[pinned: ' .. file .. ']' })
+      vim.notify('thorny: pinned ' .. file, vim.log.levels.INFO)
+    end)
+  end, opts)
+
   return bufnr
 end
 
