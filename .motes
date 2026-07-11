@@ -1,7 +1,0 @@
-
-  Key bindings (normal mode, inside a thorny buffer):
-  - <CR> — send message
-  - <leader>ac — attach context (opens a Telescope picker of project files to pin)
-  - <leader>an — new agent
-  - <leader>as — switch agent (Telescope picker)
-  - <leader>ak — kill current agent
