@@ -290,6 +290,17 @@ function M.open(a, registry, context_mod, provider_mod)
     end, opts)
   end
 
+  -- Paste keys append to the input area
+  for _, key in ipairs({ 'p', 'P' }) do
+    vim.keymap.set('n', key, function()
+      local line_count = vim.api.nvim_buf_line_count(bufnr)
+      vim.api.nvim_win_set_cursor(0, { line_count, vim.fn.col('$') })
+      with_modifiable(bufnr, function()
+        vim.cmd('normal! p')
+      end)
+    end, opts)
+  end
+
   vim.keymap.set('n', '<CR>', function()
     send_message(a, registry, context_mod, provider_mod)
   end, opts)
