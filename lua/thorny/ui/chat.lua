@@ -164,7 +164,9 @@ local function send_message(a, registry, context_mod, provider_mod)
 
   local profile = registry.get_profile(a.profile) or registry.get_profile('default')
   if not profile then
-    vim.notify('thorny: no profile "' .. a.profile .. '" found in profiles', vim.log.levels.ERROR)
+    local msg = 'No API profile found. Add your key to ~/.config/nvim/thorny/profiles.json and run :ThornyReloadProfiles'
+    append_history(a.buf, { '', '[thorny error] ' .. msg, '' })
+    vim.notify('thorny: ' .. msg, vim.log.levels.ERROR)
     return
   end
 
@@ -221,13 +223,25 @@ function M.open(a, registry, context_mod, provider_mod)
   vim.bo[bufnr].buftype   = 'nofile'
   vim.bo[bufnr].buflisted = true
 
+  -- Warn immediately if no profile is configured
+  local profile_warning = {}
+  local profile_ok = registry.get_profile(a.profile) or registry.get_profile('default')
+  if not profile_ok then
+    profile_warning = {
+      '[thorny] No API key configured. Add one to ~/.config/nvim/thorny/profiles.json',
+      '[thorny] then run :ThornyReloadProfiles',
+      '',
+    }
+  end
+
   -- Initial buffer contents
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.list_extend({
     '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode,
     '',
+  }, vim.list_extend(profile_warning, {
     SEPARATOR,
     INPUT_PROMPT,
-  })
+  })))
 
   -- Open in a split
   vim.cmd('vsplit')

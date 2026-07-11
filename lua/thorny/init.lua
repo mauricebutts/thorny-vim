@@ -80,6 +80,19 @@ function M.setup(config)
     vim.notify('thorny: all agents persisted', vim.log.levels.INFO)
   end, {})
 
+  vim.api.nvim_create_user_command('ThornyReloadProfiles', function()
+    local p2 = persist()
+    local profiles = p2.load_profiles(M._config.profiles_path)
+    registry().setup(profiles)
+    local count = 0
+    for _ in pairs(profiles) do count = count + 1 end
+    if count == 0 then
+      vim.notify('thorny: no profiles loaded — check ' .. M._config.profiles_path, vim.log.levels.WARN)
+    else
+      vim.notify('thorny: loaded ' .. count .. ' profile(s)', vim.log.levels.INFO)
+    end
+  end, {})
+
   vim.api.nvim_create_user_command('ThornyProfile', function()
     -- Find the agent for the current buffer
     local bufnr = vim.api.nvim_get_current_buf()
