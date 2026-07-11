@@ -50,17 +50,24 @@ local TOOLS = {
       },
       required = { 'file_path', 'edits' },
     },
+    -- Cache the tools definition — it never changes between requests
+    cache_control = { type = 'ephemeral' },
   },
 }
 
 M.TOOLS = TOOLS
 
 function M.stream(messages, system, tools, profile, callbacks)
+  -- System prompt sent as an array so Anthropic can cache it between turns
+  local system_payload = {
+    { type = 'text', text = system, cache_control = { type = 'ephemeral' } }
+  }
+
   local body = vim.json.encode({
     model      = 'claude-opus-4-6',
     max_tokens = 8192,
     stream     = true,
-    system     = system,
+    system     = system_payload,
     messages   = messages,
     tools      = tools or TOOLS,
   })
@@ -147,6 +154,7 @@ function M.stream(messages, system, tools, profile, callbacks)
       'https://api.anthropic.com/v1/messages',
       '-H', 'Content-Type: application/json',
       '-H', 'anthropic-version: 2023-06-01',
+      '-H', 'anthropic-beta: prompt-caching-2024-07-31',
       '--config', tmpfile,
       '-d', body,
     }

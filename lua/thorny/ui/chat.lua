@@ -183,11 +183,15 @@ local function send_message(a, registry, context_mod, provider_mod)
     return
   end
 
-  local context_str = context_mod.build(a, vim.fn.getcwd())
-  local system = a.persona
-  if context_str ~= '' then
-    system = system .. '\n\n' .. context_str
+  -- Build system prompt once per session; reuse cached value on subsequent sends
+  if not a._cached_system then
+    local context_str = context_mod.build(a, vim.fn.getcwd())
+    a._cached_system = a.persona
+    if context_str ~= '' then
+      a._cached_system = a._cached_system .. '\n\n' .. context_str
+    end
   end
+  local system = a._cached_system
 
   -- Marker for the start of this response
   append_history(a.buf, { 'Claude: ' })
@@ -315,6 +319,7 @@ function M.open(a, registry, context_mod, provider_mod)
     picker_mod.pick_context_files(vim.fn.getcwd(), function(file)
       a.pinned_files = a.pinned_files or {}
       table.insert(a.pinned_files, file)
+      a._cached_system = nil  -- force context rebuild on next send
       append_history(bufnr, { '[pinned: ' .. file .. ']' })
       vim.notify('thorny: pinned ' .. file, vim.log.levels.INFO)
     end)
