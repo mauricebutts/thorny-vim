@@ -3,13 +3,14 @@ local M = {}
 function M.new(name, persona, profile, context_mode)
   assert(type(name) == 'string' and name ~= '', 'agent name must be a non-empty string')
   return {
-    name         = name,
-    persona      = persona or '',
-    profile      = profile or 'default',
-    context_mode = context_mode or 'project',
-    history      = {},
-    pending_edits = {},
-    buf          = nil,
+    name           = name,
+    persona        = persona or '',
+    profile        = profile or 'default',
+    context_mode   = context_mode or 'project',
+    history        = {},
+    pending_edits  = {},
+    buf            = nil,
+    _cached_system = nil,  -- built once per session, invalidated on context change
   }
 end
 
