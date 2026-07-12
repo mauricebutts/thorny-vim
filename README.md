@@ -2,6 +2,8 @@
 
 A Neovim AI agent harness. Spin up multiple Claude agents as buffers, navigate between them like files, stream responses in real time, and apply code edits with a single keystroke.
 
+**Warning**: This is still WIP and may cause excessive token usage :)
+
 ## Requirements
 
 - Neovim ≥ 0.9
@@ -15,7 +17,7 @@ A Neovim AI agent harness. Spin up multiple Claude agents as buffers, navigate b
 Add to your `init.vim` with vim-plug:
 
 ```vim
-Plug 'your-username/thorny.nvim'
+Plug 'your-username/thorny.nvim' # TODO fix this
 ```
 
 Then in your Lua config (or a `lua << EOF` block):
@@ -88,3 +90,18 @@ When you ask an agent to modify code, Claude responds with a structured edit pro
 ```bash
 nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {sequential=true}"
 ```
+
+## ToDo
+* Enable more providers OpenAI, as well as bespoke agents and local agents
+* Compact conext and manage context 
+* Context management (dont send the whole repo every time)
+* Context - Send needed files
+* Web search?
+* Tools?
+
+  - Web Search — search the internet
+  - Web Fetch — retrieve page content
+  - Code Execution — run code in a sandbox
+  - Computer Use — vision-based screen interaction
+  - Text Editor / Bash — file and shell operations
+
