@@ -196,33 +196,38 @@ local function send_message(a, registry, context_mod, provider_mod)
   -- Marker for the start of this response
   append_history(a.buf, { 'Claude: ' })
 
-  -- Accumulate the full response text during streaming for history
+  -- Accumulate the full response text during streaming for history.
+  -- response_text spans all turns (including after pause_turn re-sends).
   local response_text = ''
 
-  provider_mod.stream(
-    a.history,
-    system,
-    provider_mod.TOOLS,
-    profile,
-    {
-      on_token = function(text)
-        response_text = response_text .. text
-        M.append_text(a, text)
-      end,
-      on_tool_use = function(tool_call)
-        agent_mod.add_pending_edit(a, tool_call)
-        M.append_tool_use(a, tool_call)
-      end,
-      on_done = function()
-        agent_mod.add_message(a, 'assistant', response_text)
-        append_history(a.buf, { '' })
-        require('thorny.persist').save_agent(a)
-      end,
-      on_error = function(msg)
-        append_history(a.buf, { '[error: ' .. msg .. ']', '' })
-      end,
-    }
-  )
+  -- Define callbacks as a named local so on_pause can reference them for re-send.
+  local callbacks
+  callbacks = {
+    on_token = function(text)
+      response_text = response_text .. text
+      M.append_text(a, text)
+    end,
+    on_tool_use = function(tool_call)
+      agent_mod.add_pending_edit(a, tool_call)
+      M.append_tool_use(a, tool_call)
+    end,
+    -- pause_turn: Anthropic is executing a server tool (e.g. web_search).
+    -- Push the partial assistant turn to history so Anthropic can inject the
+    -- tool result on the re-send, then fire the stream again.
+    on_pause = function(content_blocks)
+      table.insert(a.history, { role = 'assistant', content = content_blocks })
+      provider_mod.stream(a.history, system, provider_mod.TOOLS, profile, callbacks)
+    end,
+    on_done = function()
+      agent_mod.add_message(a, 'assistant', response_text)
+      append_history(a.buf, { '' })
+      require('thorny.persist').save_agent(a)
+    end,
+    on_error = function(msg)
+      append_history(a.buf, { '[error: ' .. msg .. ']', '' })
+    end,
+  }
+  provider_mod.stream(a.history, system, provider_mod.TOOLS, profile, callbacks)
 end
 
 function M.open(a, registry, context_mod, provider_mod)

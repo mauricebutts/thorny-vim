@@ -4,6 +4,13 @@ local M = {}
 M._curl_cmd = 'curl'
 
 local TOOLS = {
+  -- Server tool: Anthropic executes the search on its own infrastructure.
+  -- The response includes server_tool_use / web_search_tool_result content blocks;
+  -- no client-side tool_result is needed.
+  {
+    type = 'web_search_20260318',
+    name = 'web_search',
+  },
   {
     name        = 'Edit',
     description = 'Replace exact text in a file. old_string must match exactly (including whitespace).',
@@ -76,18 +83,44 @@ function M.stream(messages, system, tools, profile, callbacks)
   local stderr = vim.loop.new_pipe(false)
 
   -- SSE parser state
-  local line_buf      = ''
-  local current_block = nil   -- {type, id, name} for tool_use blocks
-  local tool_json_buf = ''    -- accumulates partial_json for tool_use input
+  local line_buf           = ''
+  local current_block      = nil  -- content block currently being streamed
+  local tool_json_buf      = ''   -- accumulates partial_json for tool input
+  local accumulated_blocks = {}   -- all content blocks for this turn (for pause_turn re-send)
+  local is_pause           = false
 
   local function handle_event(event)
     if event.type == 'content_block_start' then
       current_block = event.content_block
       tool_json_buf = ''
+      local cb_type = current_block.type
+      if cb_type == 'text' then
+        table.insert(accumulated_blocks, { type = 'text', text = '' })
+      elseif cb_type == 'server_tool_use' then
+        -- Anthropic is executing a server-side tool; show indicator, track for re-send
+        table.insert(accumulated_blocks, {
+          type  = 'server_tool_use',
+          id    = current_block.id,
+          name  = current_block.name,
+          input = {},
+        })
+        vim.schedule(function()
+          callbacks.on_token('\n[searching the web...]\n')
+        end)
+      end
+      -- web_search_tool_result blocks are visible in the stream for context but
+      -- require no client action; we intentionally do not accumulate them.
 
     elseif event.type == 'content_block_delta' then
       local delta = event.delta
       if delta.type == 'text_delta' then
+        -- Keep accumulated text block in sync for pause_turn re-send
+        for i = #accumulated_blocks, 1, -1 do
+          if accumulated_blocks[i].type == 'text' then
+            accumulated_blocks[i].text = accumulated_blocks[i].text .. delta.text
+            break
+          end
+        end
         vim.schedule(function()
           callbacks.on_token(delta.text)
         end)
@@ -96,22 +129,57 @@ function M.stream(messages, system, tools, profile, callbacks)
       end
 
     elseif event.type == 'content_block_stop' then
-      if current_block and current_block.type == 'tool_use' then
-        local ok, input = pcall(vim.json.decode, tool_json_buf)
-        if ok then
-          local tool_call = { id = current_block.id, name = current_block.name, input = input }
-          vim.schedule(function()
-            callbacks.on_tool_use(tool_call)
-          end)
+      if current_block then
+        local cb_type = current_block.type
+        if cb_type == 'tool_use' then
+          local ok, input = pcall(vim.json.decode, tool_json_buf)
+          if ok then
+            table.insert(accumulated_blocks, {
+              type  = 'tool_use',
+              id    = current_block.id,
+              name  = current_block.name,
+              input = input,
+            })
+            local tool_call = { id = current_block.id, name = current_block.name, input = input }
+            vim.schedule(function()
+              callbacks.on_tool_use(tool_call)
+            end)
+          end
+        elseif cb_type == 'server_tool_use' then
+          -- Finalise the input field on the accumulated block
+          local ok, input = pcall(vim.json.decode, tool_json_buf)
+          if ok then
+            for i = #accumulated_blocks, 1, -1 do
+              local blk = accumulated_blocks[i]
+              if blk.type == 'server_tool_use' and blk.id == current_block.id then
+                blk.input = input
+                break
+              end
+            end
+          end
         end
         current_block = nil
         tool_json_buf = ''
       end
 
+    elseif event.type == 'message_delta' then
+      -- pause_turn means a server tool is executing; the client must re-send so
+      -- Anthropic can inject the tool result and continue generation.
+      if event.delta and event.delta.stop_reason == 'pause_turn' then
+        is_pause = true
+        if callbacks.on_pause then
+          vim.schedule(function()
+            callbacks.on_pause(accumulated_blocks)
+          end)
+        end
+      end
+
     elseif event.type == 'message_stop' then
-      vim.schedule(function()
-        callbacks.on_done()
-      end)
+      if not is_pause then
+        vim.schedule(function()
+          callbacks.on_done()
+        end)
+      end
     end
   end
 
