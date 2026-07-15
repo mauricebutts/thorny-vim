@@ -29,6 +29,7 @@ function M.stream(messages, system, tools, profile, callbacks)
   local tool_json_buf      = ''   -- accumulates partial_json for tool input
   local accumulated_blocks = {}   -- all content blocks for this turn (for pause_turn re-send)
   local is_pause           = false
+  local is_tool_use        = false
 
   local function handle_event(event)
     if event.type == 'content_block_start' then
@@ -104,19 +105,27 @@ function M.stream(messages, system, tools, profile, callbacks)
       end
 
     elseif event.type == 'message_delta' then
-      -- pause_turn means a server tool is executing; the client must re-send so
-      -- Anthropic can inject the tool result and continue generation.
-      if event.delta and event.delta.stop_reason == 'pause_turn' then
+      local stop_reason = event.delta and event.delta.stop_reason
+      if stop_reason == 'pause_turn' then
+        -- Anthropic is executing a server tool; re-send so it can inject the result.
         is_pause = true
         if callbacks.on_pause then
           vim.schedule(function()
             callbacks.on_pause(accumulated_blocks)
           end)
         end
+      elseif stop_reason == 'tool_use' then
+        -- Client tool calls are complete for this turn; dispatch them.
+        is_tool_use = true
+        if callbacks.on_tools_done then
+          vim.schedule(function()
+            callbacks.on_tools_done(accumulated_blocks)
+          end)
+        end
       end
 
     elseif event.type == 'message_stop' then
-      if not is_pause then
+      if not is_pause and not is_tool_use then
         vim.schedule(function()
           callbacks.on_done()
         end)
