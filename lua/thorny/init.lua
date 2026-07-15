@@ -118,12 +118,44 @@ function M.setup(config)
     end,
   })
 
+  -- Register built-in tools. Order matters: cache_control is applied to the
+  -- last non-server tool (MultiEdit) by registry.get_definitions().
+  local tool_registry = require('thorny.tools.registry')
+  tool_registry.register(require('thorny.tools.builtin.web_search'))
+  tool_registry.register(require('thorny.tools.builtin.read_file'))
+  tool_registry.register(require('thorny.tools.builtin.edit'))
+  tool_registry.register(require('thorny.tools.builtin.write'))
+  tool_registry.register(require('thorny.tools.builtin.multi_edit'))
+
   -- Global keymaps (non-buffer-local)
   vim.keymap.set('n', '<leader>an', ':ThornyNew<CR>',    { noremap = true, silent = true, desc = 'Thorny: new agent' })
   vim.keymap.set('n', '<leader>as', ':ThornySwitch<CR>', { noremap = true, silent = true, desc = 'Thorny: switch agent' })
   vim.keymap.set('n', '<leader>ak', ':ThornyKill<CR>',   { noremap = true, silent = true, desc = 'Thorny: kill agent' })
 
   -- Buffer-local keymaps set inside chat.open() for <CR>, <leader>ha, <leader>ac
+end
+
+-- Public API for third-party plugins.
+-- Call from your plugin's setup() after require('thorny').setup() has run.
+--
+-- Example auto tool:
+--   require('thorny').register_tool({
+--     definition = {
+--       name = 'RunTests',
+--       description = 'Run the test suite and return output.',
+--       input_schema = {
+--         type = 'object',
+--         properties = { pattern = { type = 'string' } },
+--         required = {},
+--       },
+--     },
+--     mode = 'auto',
+--     execute = function(input, ctx)
+--       return vim.fn.system('npm test -- ' .. (input.pattern or ''))
+--     end,
+--   })
+function M.register_tool(spec)
+  require('thorny.tools.registry').register(spec)
 end
 
 return M
