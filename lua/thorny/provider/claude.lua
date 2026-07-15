@@ -3,66 +3,7 @@ local M = {}
 -- Override in tests to point at a fake curl script
 M._curl_cmd = 'curl'
 
-local TOOLS = {
-  -- Server tool: Anthropic executes the search on its own infrastructure.
-  -- The response includes server_tool_use / web_search_tool_result content blocks;
-  -- no client-side tool_result is needed.
-  {
-    type = 'web_search_20260318',
-    name = 'web_search',
-  },
-  {
-    name        = 'Edit',
-    description = 'Replace exact text in a file. old_string must match exactly (including whitespace).',
-    input_schema = {
-      type       = 'object',
-      properties = {
-        file_path  = { type = 'string', description = 'Path to the file to edit' },
-        old_string = { type = 'string', description = 'The exact text to replace' },
-        new_string = { type = 'string', description = 'The replacement text' },
-      },
-      required = { 'file_path', 'old_string', 'new_string' },
-    },
-  },
-  {
-    name        = 'Write',
-    description = 'Write complete contents to a file, creating it if it does not exist.',
-    input_schema = {
-      type       = 'object',
-      properties = {
-        file_path = { type = 'string', description = 'Path to the file to write' },
-        content   = { type = 'string', description = 'The full file contents' },
-      },
-      required = { 'file_path', 'content' },
-    },
-  },
-  {
-    name        = 'MultiEdit',
-    description = 'Apply multiple Edit operations to a single file.',
-    input_schema = {
-      type       = 'object',
-      properties = {
-        file_path = { type = 'string', description = 'Path to the file to edit' },
-        edits     = {
-          type  = 'array',
-          items = {
-            type       = 'object',
-            properties = {
-              old_string = { type = 'string' },
-              new_string = { type = 'string' },
-            },
-            required = { 'old_string', 'new_string' },
-          },
-        },
-      },
-      required = { 'file_path', 'edits' },
-    },
-    -- Cache the tools definition — it never changes between requests
-    cache_control = { type = 'ephemeral' },
-  },
-}
-
-M.TOOLS = TOOLS
+local registry = require('thorny.tools.registry')
 
 function M.stream(messages, system, tools, profile, callbacks)
   -- System prompt sent as an array so Anthropic can cache it between turns
@@ -76,7 +17,7 @@ function M.stream(messages, system, tools, profile, callbacks)
     stream     = true,
     system     = system_payload,
     messages   = messages,
-    tools      = tools or TOOLS,
+    tools      = tools or registry.get_definitions(),
   })
 
   local stdout = vim.loop.new_pipe(false)
