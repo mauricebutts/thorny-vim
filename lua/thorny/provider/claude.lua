@@ -130,11 +130,28 @@ function M.stream(messages, system, tools, profile, callbacks)
           callbacks.on_done()
         end)
       end
+
+    elseif event.type == 'error' then
+      local err = event.error or {}
+      vim.schedule(function()
+        callbacks.on_error((err.type or 'error') .. ': ' .. (err.message or vim.inspect(err)))
+      end)
     end
   end
 
   local function on_stdout(err, data)
-    if err or not data then return end
+    if err then return end
+    if not data then
+      -- pipe closed — surface any non-SSE error body left in line_buf
+      if #line_buf > 0 then
+        local captured = line_buf
+        line_buf = ''
+        vim.schedule(function()
+          callbacks.on_error('API error: ' .. captured)
+        end)
+      end
+      return
+    end
     line_buf = line_buf .. data
     while true do
       local nl = line_buf:find('\n')
@@ -147,6 +164,11 @@ function M.stream(messages, system, tools, profile, callbacks)
           local ok, event = pcall(vim.json.decode, json_str)
           if ok then handle_event(event) end
         end
+      elseif line ~= '' then
+        -- Non-SSE line: likely an HTTP error body — surface it for debugging
+        vim.schedule(function()
+          vim.notify('thorny raw: ' .. line:sub(1, 200), vim.log.levels.WARN)
+        end)
       end
     end
   end
