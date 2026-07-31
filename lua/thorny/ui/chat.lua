@@ -1,7 +1,9 @@
-local agent_mod = require('thorny.agent')
+local agent_mod     = require('thorny.agent')
+local tool_registry = require('thorny.tools.registry')
 local M = {}
 
-local SEPARATOR = string.rep('─', 60)
+local SEPARATOR      = string.rep('─', 60)
+local SPINNER_FRAMES = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 local INPUT_PROMPT = '> '
 
 -- Temporarily enable modifiable, run fn, then restore to false
@@ -108,6 +110,17 @@ function M.append_tool_use(a, tool_call)
   append_history(a.buf, lines)
 end
 
+-- Rejects the most recent pending edit without applying it
+function M.reject_pending_edit(a)
+  local tool_call = agent_mod.pop_pending_edit(a)
+  if not tool_call then
+    vim.notify('thorny: no pending edits', vim.log.levels.INFO)
+    return
+  end
+  agent_mod.add_tool_result(a, tool_call.id, 'User rejected this edit.')
+  append_history(a.buf, { '', '✗ edit rejected', '' })
+end
+
 -- Applies the most recent pending edit to the target file
 function M.apply_pending_edit(a)
   local tool_call = agent_mod.pop_pending_edit(a)
@@ -116,51 +129,59 @@ function M.apply_pending_edit(a)
     return
   end
 
+  local spec = tool_registry.get(tool_call.name)
+  if not spec or spec.mode ~= 'pending' then
+    vim.notify('thorny: unknown pending tool: ' .. tool_call.name, vim.log.levels.WARN)
+    return
+  end
+
+  local input = tool_call.input
+  local cwd   = vim.fn.getcwd()
+
   local function apply_edit(file_path, old_string, new_string)
-    local abs = file_path:sub(1, 1) == '/' and file_path or (vim.fn.getcwd() .. '/' .. file_path)
-    -- Load into a buffer if not already open
+    local abs = file_path:sub(1, 1) == '/' and file_path or (cwd .. '/' .. file_path)
     local bufnr = vim.fn.bufnr(abs)
     if bufnr == -1 then
       bufnr = vim.fn.bufadd(abs)
       vim.fn.bufload(bufnr)
     end
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local lines   = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local content = table.concat(lines, '\n')
-    local escaped_old = old_string:gsub('[%(%)%.%%%+%-%*%?%[%^%$]', '%%%1')
-    local new_content, n = content:gsub(escaped_old, new_string, 1)
+    local escaped = old_string:gsub('[%(%)%.%%%+%-%*%?%[%^%$]', '%%%1')
+    local new_content, n = content:gsub(escaped, new_string, 1)
     if n == 0 then
       vim.notify('thorny: Edit failed — old_string not found in ' .. file_path, vim.log.levels.ERROR)
       return false
     end
-    local new_lines = vim.split(new_content, '\n', { plain = true })
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(new_content, '\n', { plain = true }))
     return true
   end
 
   local ok = false
   if tool_call.name == 'Edit' then
-    ok = apply_edit(tool_call.input.file_path, tool_call.input.old_string, tool_call.input.new_string)
+    ok = apply_edit(input.file_path, input.old_string, input.new_string)
   elseif tool_call.name == 'Write' then
-    local abs = tool_call.input.file_path
-    if abs:sub(1, 1) ~= '/' then abs = vim.fn.getcwd() .. '/' .. abs end
-    local new_lines = vim.split(tool_call.input.content or '', '\n', { plain = true })
+    local abs = input.file_path:sub(1, 1) == '/' and input.file_path or (cwd .. '/' .. input.file_path)
     local bufnr = vim.fn.bufadd(abs)
     vim.fn.bufload(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(input.content or '', '\n', { plain = true }))
     ok = true
   elseif tool_call.name == 'MultiEdit' then
     ok = true
-    for _, edit in ipairs(tool_call.input.edits or {}) do
-      if not apply_edit(tool_call.input.file_path, edit.old_string, edit.new_string) then
+    for _, edit in ipairs(input.edits or {}) do
+      if not apply_edit(input.file_path, edit.old_string, edit.new_string) then
         ok = false
         break
       end
     end
+  else
+    vim.notify('thorny: pending tool "' .. tool_call.name .. '" has no built-in apply handler', vim.log.levels.WARN)
+    return
   end
 
   if ok then
-    agent_mod.add_tool_result(a, tool_call.id, 'Edit applied successfully.')
-    append_history(a.buf, { '', '✓ edit applied to ' .. (tool_call.input.file_path or tool_call.name), '' })
+    agent_mod.add_tool_result(a, tool_call.id, tool_call.name .. ' applied successfully.')
+    append_history(a.buf, { '', '✓ edit applied to ' .. (input.file_path or tool_call.name), '' })
   end
 end
 
@@ -196,38 +217,116 @@ local function send_message(a, registry, context_mod, provider_mod)
   -- Marker for the start of this response
   append_history(a.buf, { 'Claude: ' })
 
-  -- Accumulate the full response text during streaming for history.
-  -- response_text spans all turns (including after pause_turn re-sends).
+  -- Spinner: animates the Claude: line until the first token (or error) arrives
+  local spinner_timer  = nil
+  local spinner_idx    = 1
+  local spinner_active = true
+
+  local function stop_spinner()
+    if spinner_timer then
+      spinner_timer:stop()
+      spinner_timer:close()
+      spinner_timer = nil
+    end
+  end
+
+  spinner_timer = vim.loop.new_timer()
+  spinner_timer:start(0, 80, vim.schedule_wrap(function()
+    if not vim.api.nvim_buf_is_valid(a.buf) then stop_spinner(); return end
+    local sep = get_separator_line(a.buf)
+    if not sep or sep < 1 then return end
+    local frame = SPINNER_FRAMES[spinner_idx]
+    spinner_idx = (spinner_idx % #SPINNER_FRAMES) + 1
+    with_modifiable(a.buf, function()
+      vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { 'Claude: ' .. frame })
+    end)
+  end))
+
   local response_text = ''
 
-  -- Define callbacks as a named local so on_pause can reference them for re-send.
   local callbacks
   callbacks = {
     on_token = function(text)
+      if spinner_active then
+        spinner_active = false
+        stop_spinner()
+        -- Clear spinner char so first token appends to clean "Claude: " line
+        local sep = get_separator_line(a.buf)
+        if sep and sep >= 1 then
+          with_modifiable(a.buf, function()
+            vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { 'Claude: ' })
+          end)
+        end
+      end
       response_text = response_text .. text
       M.append_text(a, text)
     end,
+
     on_tool_use = function(tool_call)
-      agent_mod.add_pending_edit(a, tool_call)
-      M.append_tool_use(a, tool_call)
+      local spec = tool_registry.get(tool_call.name)
+      if spec and spec.mode == 'pending' then
+        agent_mod.add_pending_edit(a, tool_call)
+        M.append_tool_use(a, tool_call)
+      end
+      -- auto-mode tools (ReadFile) are handled silently in on_tools_done
     end,
+
+    -- stop_reason == 'tool_use': all client tool calls for this turn are done.
+    -- Add the full assistant turn to history, execute auto tools and re-send,
+    -- or park at the pending-edit UI.
+    on_tools_done = function(content_blocks)
+      stop_spinner()
+      table.insert(a.history, { role = 'assistant', content = content_blocks })
+      response_text = ''  -- reset; next turn accumulates fresh text
+
+      local has_auto = false
+      for _, blk in ipairs(content_blocks) do
+        if blk.type == 'tool_use' then
+          local spec = tool_registry.get(blk.name)
+          if spec and spec.mode == 'auto' then
+            has_auto = true
+            local ctx    = { cwd = vim.fn.getcwd() }
+            local result = spec.execute(blk.input, ctx)
+            agent_mod.add_tool_result(a, blk.id, result)
+            local label = blk.input.file_path or blk.input.path or blk.name
+            append_history(a.buf, { '[' .. blk.name .. ': ' .. label .. ']' })
+          elseif has_auto then
+            -- Mixed turn: auto + pending. Add placeholder so the API accepts
+            -- the re-send; the pending edit was already shown via on_tool_use.
+            agent_mod.add_tool_result(a, blk.id, 'Deferred: awaiting file reads in this turn.')
+          end
+        end
+      end
+
+      if has_auto then
+        provider_mod.stream(a.history, system, nil, profile, callbacks)
+      else
+        -- Pure pending-edit turn — wait for user to press <leader>ha
+        append_history(a.buf, { '' })
+        require('thorny.persist').save_agent(a)
+      end
+    end,
+
     -- pause_turn: Anthropic is executing a server tool (e.g. web_search).
     -- Push the partial assistant turn to history so Anthropic can inject the
     -- tool result on the re-send, then fire the stream again.
     on_pause = function(content_blocks)
       table.insert(a.history, { role = 'assistant', content = content_blocks })
-      provider_mod.stream(a.history, system, provider_mod.TOOLS, profile, callbacks)
+      provider_mod.stream(a.history, system, nil, profile, callbacks)
     end,
+
     on_done = function()
       agent_mod.add_message(a, 'assistant', response_text)
       append_history(a.buf, { '' })
       require('thorny.persist').save_agent(a)
     end,
+
     on_error = function(msg)
+      stop_spinner()
       append_history(a.buf, { '[error: ' .. msg .. ']', '' })
     end,
   }
-  provider_mod.stream(a.history, system, provider_mod.TOOLS, profile, callbacks)
+  provider_mod.stream(a.history, system, nil, profile, callbacks)
 end
 
 function M.open(a, registry, context_mod, provider_mod)
@@ -317,6 +416,10 @@ function M.open(a, registry, context_mod, provider_mod)
 
   vim.keymap.set('n', '<leader>ha', function()
     M.apply_pending_edit(a)
+  end, opts)
+
+  vim.keymap.set('n', '<leader>hr', function()
+    M.reject_pending_edit(a)
   end, opts)
 
   vim.keymap.set('n', '<leader>ac', function()

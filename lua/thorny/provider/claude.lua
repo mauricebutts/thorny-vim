@@ -3,66 +3,7 @@ local M = {}
 -- Override in tests to point at a fake curl script
 M._curl_cmd = 'curl'
 
-local TOOLS = {
-  -- Server tool: Anthropic executes the search on its own infrastructure.
-  -- The response includes server_tool_use / web_search_tool_result content blocks;
-  -- no client-side tool_result is needed.
-  {
-    type = 'web_search_20260318',
-    name = 'web_search',
-  },
-  {
-    name        = 'Edit',
-    description = 'Replace exact text in a file. old_string must match exactly (including whitespace).',
-    input_schema = {
-      type       = 'object',
-      properties = {
-        file_path  = { type = 'string', description = 'Path to the file to edit' },
-        old_string = { type = 'string', description = 'The exact text to replace' },
-        new_string = { type = 'string', description = 'The replacement text' },
-      },
-      required = { 'file_path', 'old_string', 'new_string' },
-    },
-  },
-  {
-    name        = 'Write',
-    description = 'Write complete contents to a file, creating it if it does not exist.',
-    input_schema = {
-      type       = 'object',
-      properties = {
-        file_path = { type = 'string', description = 'Path to the file to write' },
-        content   = { type = 'string', description = 'The full file contents' },
-      },
-      required = { 'file_path', 'content' },
-    },
-  },
-  {
-    name        = 'MultiEdit',
-    description = 'Apply multiple Edit operations to a single file.',
-    input_schema = {
-      type       = 'object',
-      properties = {
-        file_path = { type = 'string', description = 'Path to the file to edit' },
-        edits     = {
-          type  = 'array',
-          items = {
-            type       = 'object',
-            properties = {
-              old_string = { type = 'string' },
-              new_string = { type = 'string' },
-            },
-            required = { 'old_string', 'new_string' },
-          },
-        },
-      },
-      required = { 'file_path', 'edits' },
-    },
-    -- Cache the tools definition — it never changes between requests
-    cache_control = { type = 'ephemeral' },
-  },
-}
-
-M.TOOLS = TOOLS
+local registry = require('thorny.tools.registry')
 
 function M.stream(messages, system, tools, profile, callbacks)
   -- System prompt sent as an array so Anthropic can cache it between turns
@@ -76,7 +17,7 @@ function M.stream(messages, system, tools, profile, callbacks)
     stream     = true,
     system     = system_payload,
     messages   = messages,
-    tools      = tools or TOOLS,
+    tools      = tools or registry.get_definitions(),
   })
 
   local stdout = vim.loop.new_pipe(false)
@@ -88,6 +29,7 @@ function M.stream(messages, system, tools, profile, callbacks)
   local tool_json_buf      = ''   -- accumulates partial_json for tool input
   local accumulated_blocks = {}   -- all content blocks for this turn (for pause_turn re-send)
   local is_pause           = false
+  local is_tool_use        = false
 
   local function handle_event(event)
     if event.type == 'content_block_start' then
@@ -163,28 +105,53 @@ function M.stream(messages, system, tools, profile, callbacks)
       end
 
     elseif event.type == 'message_delta' then
-      -- pause_turn means a server tool is executing; the client must re-send so
-      -- Anthropic can inject the tool result and continue generation.
-      if event.delta and event.delta.stop_reason == 'pause_turn' then
+      local stop_reason = event.delta and event.delta.stop_reason
+      if stop_reason == 'pause_turn' then
+        -- Anthropic is executing a server tool; re-send so it can inject the result.
         is_pause = true
         if callbacks.on_pause then
           vim.schedule(function()
             callbacks.on_pause(accumulated_blocks)
           end)
         end
+      elseif stop_reason == 'tool_use' then
+        -- Client tool calls are complete for this turn; dispatch them.
+        is_tool_use = true
+        if callbacks.on_tools_done then
+          vim.schedule(function()
+            callbacks.on_tools_done(accumulated_blocks)
+          end)
+        end
       end
 
     elseif event.type == 'message_stop' then
-      if not is_pause then
+      if not is_pause and not is_tool_use then
         vim.schedule(function()
           callbacks.on_done()
         end)
       end
+
+    elseif event.type == 'error' then
+      local err = event.error or {}
+      vim.schedule(function()
+        callbacks.on_error((err.type or 'error') .. ': ' .. (err.message or vim.inspect(err)))
+      end)
     end
   end
 
   local function on_stdout(err, data)
-    if err or not data then return end
+    if err then return end
+    if not data then
+      -- pipe closed — surface any non-SSE error body left in line_buf
+      if #line_buf > 0 then
+        local captured = line_buf
+        line_buf = ''
+        vim.schedule(function()
+          callbacks.on_error('API error: ' .. captured)
+        end)
+      end
+      return
+    end
     line_buf = line_buf .. data
     while true do
       local nl = line_buf:find('\n')
@@ -197,6 +164,11 @@ function M.stream(messages, system, tools, profile, callbacks)
           local ok, event = pcall(vim.json.decode, json_str)
           if ok then handle_event(event) end
         end
+      elseif line ~= '' then
+        -- Non-SSE line: likely an HTTP error body — surface it for debugging
+        vim.schedule(function()
+          vim.notify('thorny raw: ' .. line:sub(1, 200), vim.log.levels.WARN)
+        end)
       end
     end
   end
