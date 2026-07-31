@@ -109,6 +109,17 @@ function M.append_tool_use(a, tool_call)
   append_history(a.buf, lines)
 end
 
+-- Rejects the most recent pending edit without applying it
+function M.reject_pending_edit(a)
+  local tool_call = agent_mod.pop_pending_edit(a)
+  if not tool_call then
+    vim.notify('thorny: no pending edits', vim.log.levels.INFO)
+    return
+  end
+  agent_mod.add_tool_result(a, tool_call.id, 'User rejected this edit.')
+  append_history(a.buf, { '', '✗ edit rejected', '' })
+end
+
 -- Applies the most recent pending edit to the target file
 function M.apply_pending_edit(a)
   local tool_call = agent_mod.pop_pending_edit(a)
@@ -366,6 +377,10 @@ function M.open(a, registry, context_mod, provider_mod)
 
   vim.keymap.set('n', '<leader>ha', function()
     M.apply_pending_edit(a)
+  end, opts)
+
+  vim.keymap.set('n', '<leader>hr', function()
+    M.reject_pending_edit(a)
   end, opts)
 
   vim.keymap.set('n', '<leader>ac', function()
