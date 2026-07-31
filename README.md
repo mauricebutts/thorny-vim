@@ -81,6 +81,42 @@ Each agent has a `context_mode` that controls what project context is sent with 
 | `buffer` | Current buffer contents only |
 | `project` | Full file tree + pinned files + current buffer (like Claude Code) |
 
+## Extending with Custom Tools
+
+Register custom tools from your Neovim config after `setup()`:
+
+```lua
+require('thorny').setup({ ... })
+
+require('thorny').register_tool({
+  definition = {
+    name        = 'RunTests',
+    description = 'Run the test suite and return its output.',
+    input_schema = {
+      type       = 'object',
+      properties = {
+        pattern = { type = 'string', description = 'Optional test filter pattern' },
+      },
+      required = {},
+    },
+  },
+  mode = 'auto',
+  execute = function(input, ctx)
+    return vim.fn.system('npm test -- ' .. (input.pattern or ''))
+  end,
+})
+```
+
+### Tool modes
+
+| Mode | Behaviour |
+|---|---|
+| `auto` | Executed immediately by thorny; result sent back to Claude; Claude continues |
+| `pending` | Shown as a pending-edit block in the chat buffer; apply with `<leader>ha` |
+| `server` | Executed by Anthropic's infrastructure (built-ins only, e.g. `web_search`) |
+
+`auto` is the right choice for most custom tools. The `execute` function receives `input` (the arguments Claude passed) and `ctx` (a table with `cwd`), and must return a string.
+
 ## How Edits Work
 
 When you ask an agent to modify code, Claude responds with a structured edit proposal rendered inline in the chat buffer. Press `<leader>ha` to apply it directly to the target file. To decline, just type a follow-up message.
@@ -92,11 +128,13 @@ nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedDirectory 
 ```
 
 ## ToDo
+* Project-scoped chat contexts — when opening thorny in a project, show only the agents created in that project (scoped by git root or cwd); easily browse and resume past chats per-project from a picker
 * Enable more providers OpenAI, as well as bespoke agents and local agents
 * Compact conext and manage context 
 * Context management (dont send the whole repo every time)
 * Context - Send needed files
 * Web search?
+* Allow agent to manipulate vim buffers. ie: Open a new buffer with example code 
 * Tools?
 
   - Web Search — search the internet
@@ -104,4 +142,13 @@ nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedDirectory 
   - Code Execution — run code in a sandbox
   - Computer Use — vision-based screen interaction
   - Text Editor / Bash — file and shell operations
+* Neovim built-in tools — expose native editor capabilities as agent tools
+  - `GetDiagnostics` — surface current LSP errors/warnings; lets Claude verify edits didn't break anything
+  - `FindReferences` — LSP-powered symbol usage search across the project (more precise than grep)
+  - `GotoDefinition` — resolve a symbol to its definition file and line for code tracing
+  - `Hover` — retrieve LSP type info and docs for a symbol at a position
+  - `FindSymbol` — Tree-sitter query to locate a function/class/variable by name without reading a full file
+  - `GetSymbols` — list all top-level symbols in a file (cheaper than ReadFile for understanding module shape)
+  - `Grep` — ripgrep across the project for targeted pattern searches
+
 

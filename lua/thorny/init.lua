@@ -135,25 +135,6 @@ function M.setup(config)
   -- Buffer-local keymaps set inside chat.open() for <CR>, <leader>ha, <leader>ac
 end
 
--- Public API for third-party plugins.
--- Call from your plugin's setup() after require('thorny').setup() has run.
---
--- Example auto tool:
---   require('thorny').register_tool({
---     definition = {
---       name = 'RunTests',
---       description = 'Run the test suite and return output.',
---       input_schema = {
---         type = 'object',
---         properties = { pattern = { type = 'string' } },
---         required = {},
---       },
---     },
---     mode = 'auto',
---     execute = function(input, ctx)
---       return vim.fn.system('npm test -- ' .. (input.pattern or ''))
---     end,
---   })
 function M.register_tool(spec)
   require('thorny.tools.registry').register(spec)
 end
