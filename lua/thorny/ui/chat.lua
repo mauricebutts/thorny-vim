@@ -2,7 +2,8 @@ local agent_mod     = require('thorny.agent')
 local tool_registry = require('thorny.tools.registry')
 local M = {}
 
-local SEPARATOR = string.rep('─', 60)
+local SEPARATOR      = string.rep('─', 60)
+local SPINNER_FRAMES = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 local INPUT_PROMPT = '> '
 
 -- Temporarily enable modifiable, run fn, then restore to false
@@ -216,11 +217,47 @@ local function send_message(a, registry, context_mod, provider_mod)
   -- Marker for the start of this response
   append_history(a.buf, { 'Claude: ' })
 
+  -- Spinner: animates the Claude: line until the first token (or error) arrives
+  local spinner_timer  = nil
+  local spinner_idx    = 1
+  local spinner_active = true
+
+  local function stop_spinner()
+    if spinner_timer then
+      spinner_timer:stop()
+      spinner_timer:close()
+      spinner_timer = nil
+    end
+  end
+
+  spinner_timer = vim.loop.new_timer()
+  spinner_timer:start(0, 80, vim.schedule_wrap(function()
+    if not vim.api.nvim_buf_is_valid(a.buf) then stop_spinner(); return end
+    local sep = get_separator_line(a.buf)
+    if not sep or sep < 1 then return end
+    local frame = SPINNER_FRAMES[spinner_idx]
+    spinner_idx = (spinner_idx % #SPINNER_FRAMES) + 1
+    with_modifiable(a.buf, function()
+      vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { 'Claude: ' .. frame })
+    end)
+  end))
+
   local response_text = ''
 
   local callbacks
   callbacks = {
     on_token = function(text)
+      if spinner_active then
+        spinner_active = false
+        stop_spinner()
+        -- Clear spinner char so first token appends to clean "Claude: " line
+        local sep = get_separator_line(a.buf)
+        if sep and sep >= 1 then
+          with_modifiable(a.buf, function()
+            vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { 'Claude: ' })
+          end)
+        end
+      end
       response_text = response_text .. text
       M.append_text(a, text)
     end,
@@ -238,6 +275,7 @@ local function send_message(a, registry, context_mod, provider_mod)
     -- Add the full assistant turn to history, execute auto tools and re-send,
     -- or park at the pending-edit UI.
     on_tools_done = function(content_blocks)
+      stop_spinner()
       table.insert(a.history, { role = 'assistant', content = content_blocks })
       response_text = ''  -- reset; next turn accumulates fresh text
 
@@ -284,6 +322,7 @@ local function send_message(a, registry, context_mod, provider_mod)
     end,
 
     on_error = function(msg)
+      stop_spinner()
       append_history(a.buf, { '[error: ' .. msg .. ']', '' })
     end,
   }
