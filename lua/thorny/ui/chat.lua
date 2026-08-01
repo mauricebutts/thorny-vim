@@ -224,9 +224,11 @@ local function send_message(a, registry, context_mod)
   local system = a._cached_system
 
   -- Marker for the start of this response
-  append_history(a.buf, { 'Claude: ' })
+  local pname = a.provider or 'claude'
+  local plabel = pname:sub(1,1):upper() .. pname:sub(2) .. ': '
+  append_history(a.buf, { plabel })
 
-  -- Spinner: animates the Claude: line until the first token (or error) arrives
+  -- Spinner: animates the provider label line until the first token (or error) arrives
   local spinner_timer  = nil
   local spinner_idx    = 1
   local spinner_active = true
@@ -247,7 +249,7 @@ local function send_message(a, registry, context_mod)
     local frame = SPINNER_FRAMES[spinner_idx]
     spinner_idx = (spinner_idx % #SPINNER_FRAMES) + 1
     with_modifiable(a.buf, function()
-      vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { 'Claude: ' .. frame })
+      vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { plabel .. frame })
     end)
   end))
 
@@ -259,11 +261,11 @@ local function send_message(a, registry, context_mod)
       if spinner_active then
         spinner_active = false
         stop_spinner()
-        -- Clear spinner char so first token appends to clean "Claude: " line
+        -- Clear spinner char so first token appends to clean provider label line
         local sep = get_separator_line(a.buf)
         if sep and sep >= 1 then
           with_modifiable(a.buf, function()
-            vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { 'Claude: ' })
+            vim.api.nvim_buf_set_lines(a.buf, sep - 1, sep, false, { plabel })
           end)
         end
       end
