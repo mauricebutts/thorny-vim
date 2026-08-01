@@ -45,4 +45,9 @@ function M.set_agent_profile(a, profile_name)
   a.profile = profile_name
 end
 
+function M.set_agent_provider(a, provider_name)
+  a.provider = provider_name
+  a._cached_system = nil  -- force rebuild; different providers may format differently
+end
+
 return M

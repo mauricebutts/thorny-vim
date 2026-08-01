@@ -66,3 +66,24 @@ describe('registry profiles', function()
     assert.equals('work', a.profile)
   end)
 end)
+
+describe('registry set_agent_provider', function()
+  before_each(function()
+    registry.setup({
+      default = { api_key = 'sk-ant-test' },
+    })
+  end)
+
+  it('switches the provider field on the agent', function()
+    local a = agent.new('switcher', '', 'default', 'none', 'claude')
+    registry.set_agent_provider(a, 'kong')
+    assert.equals('kong', a.provider)
+  end)
+
+  it('clears _cached_system on provider switch', function()
+    local a = agent.new('switcher', '', 'default', 'none', 'claude')
+    a._cached_system = 'old system prompt'
+    registry.set_agent_provider(a, 'kong')
+    assert.is_nil(a._cached_system)
+  end)
+end)

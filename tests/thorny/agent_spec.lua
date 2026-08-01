@@ -16,6 +16,16 @@ describe('agent.new()', function()
     local a = agent.new('test', 'persona', 'personal', nil)
     assert.equals('project', a.context_mode)
   end)
+
+  it('defaults provider to claude when nil', function()
+    local a = agent.new('test', 'persona', 'personal', 'project', nil)
+    assert.equals('claude', a.provider)
+  end)
+
+  it('accepts explicit provider name', function()
+    local a = agent.new('test', 'persona', 'personal', 'project', 'kong')
+    assert.equals('kong', a.provider)
+  end)
 end)
 
 describe('agent.add_message()', function()
