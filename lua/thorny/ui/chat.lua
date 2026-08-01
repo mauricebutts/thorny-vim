@@ -224,8 +224,7 @@ local function send_message(a, registry, context_mod)
   local system = a._cached_system
 
   -- Marker for the start of this response
-  local pname = a.provider or 'claude'
-  local plabel = pname:sub(1,1):upper() .. pname:sub(2) .. ': '
+  local plabel = a.provider:sub(1,1):upper() .. a.provider:sub(2) .. ': '
   append_history(a.buf, { plabel })
 
   -- Spinner: animates the provider label line until the first token (or error) arrives
@@ -346,7 +345,7 @@ function M.update_header(a)
   if not a.buf or not vim.api.nvim_buf_is_valid(a.buf) then return end
   with_modifiable(a.buf, function()
     vim.api.nvim_buf_set_lines(a.buf, 0, 1, false, {
-      '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. (a.provider or 'claude'),
+      '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. a.provider,
     })
   end)
 end
@@ -396,7 +395,7 @@ function M.open(a, registry, context_mod)
   -- Initial buffer contents
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.list_extend({
-    '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. (a.provider or 'claude'),
+    '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. a.provider,
     '',
   }, vim.list_extend(profile_warning, {
     SEPARATOR,
