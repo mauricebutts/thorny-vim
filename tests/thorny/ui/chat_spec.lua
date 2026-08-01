@@ -6,9 +6,8 @@ describe('chat.open()', function()
     local a = agent_mod.new('chat-test', 'persona', 'default', 'none')
     local mock_registry = { get_profile = function() return { api_key = 'fake' } end }
     local mock_context  = { build = function() return '' end }
-    local mock_provider = { stream = function() end }
 
-    local bufnr = chat.open(a, mock_registry, mock_context, mock_provider)
+    local bufnr = chat.open(a, mock_registry, mock_context)
     assert.is_number(bufnr)
     assert.equals(bufnr, a.buf)
     assert.equals('thorny', vim.bo[bufnr].filetype)
@@ -18,10 +17,9 @@ describe('chat.open()', function()
     local a = agent_mod.new('chat-test2', '', 'default', 'none')
     local mock_registry = { get_profile = function() return { api_key = 'fake' } end }
     local mock_context  = { build = function() return '' end }
-    local mock_provider = { stream = function() end }
 
-    local b1 = chat.open(a, mock_registry, mock_context, mock_provider)
-    local b2 = chat.open(a, mock_registry, mock_context, mock_provider)
+    local b1 = chat.open(a, mock_registry, mock_context)
+    local b2 = chat.open(a, mock_registry, mock_context)
     assert.equals(b1, b2)
   end)
 end)
@@ -30,7 +28,7 @@ describe('chat.append_text()', function()
   it('appends text to the buffer history area', function()
     local a = agent_mod.new('append-test', '', 'default', 'none')
     local mock_registry = { get_profile = function() return { api_key = 'fake' } end }
-    chat.open(a, mock_registry, { build = function() return '' end }, { stream = function() end })
+    chat.open(a, mock_registry, { build = function() return '' end })
     chat.append_text(a, 'hello from claude')
     local lines = vim.api.nvim_buf_get_lines(a.buf, 0, -1, false)
     local found = false
@@ -48,7 +46,7 @@ describe('chat.apply_pending_edit()', function()
 
     local a = agent_mod.new('edit-test', '', 'default', 'none')
     local mock_registry = { get_profile = function() return { api_key = 'fake' } end }
-    chat.open(a, mock_registry, { build = function() return '' end }, { stream = function() end })
+    chat.open(a, mock_registry, { build = function() return '' end })
 
     agent_mod.add_pending_edit(a, {
       id    = 'toolu_x',

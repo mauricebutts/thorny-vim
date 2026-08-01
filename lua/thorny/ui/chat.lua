@@ -1,5 +1,6 @@
-local agent_mod     = require('thorny.agent')
-local tool_registry = require('thorny.tools.registry')
+local agent_mod       = require('thorny.agent')
+local tool_registry   = require('thorny.tools.registry')
+local provider_registry = require('thorny.provider.registry')
 local M = {}
 
 local SEPARATOR      = string.rep('─', 60)
@@ -186,9 +187,17 @@ function M.apply_pending_edit(a)
 end
 
 -- send_message: reads input, builds context, calls provider, streams response
-local function send_message(a, registry, context_mod, provider_mod)
+local function send_message(a, registry, context_mod)
   local input = read_input(a.buf)
   if input == '' then return end
+
+  local provider_mod = provider_registry.get(a.provider or 'claude')
+  if not provider_mod then
+    local msg = 'provider "' .. (a.provider or 'claude') .. '" is not registered'
+    append_history(a.buf, { '', '[thorny error] ' .. msg, '' })
+    vim.notify('thorny: ' .. msg, vim.log.levels.ERROR)
+    return
+  end
 
   reset_input(a.buf)
 
@@ -329,7 +338,7 @@ local function send_message(a, registry, context_mod, provider_mod)
   provider_mod.stream(a.history, system, nil, profile, callbacks)
 end
 
-function M.open(a, registry, context_mod, provider_mod)
+function M.open(a, registry, context_mod)
   -- Reuse existing buffer if valid
   if a.buf and vim.api.nvim_buf_is_valid(a.buf) then
     local win = vim.fn.bufwinid(a.buf)
@@ -411,7 +420,7 @@ function M.open(a, registry, context_mod, provider_mod)
   end
 
   vim.keymap.set('n', '<CR>', function()
-    send_message(a, registry, context_mod, provider_mod)
+    send_message(a, registry, context_mod)
   end, opts)
 
   vim.keymap.set('n', '<leader>ha', function()
