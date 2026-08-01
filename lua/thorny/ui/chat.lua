@@ -338,6 +338,17 @@ local function send_message(a, registry, context_mod)
   provider_mod.stream(a.history, system, nil, profile, callbacks)
 end
 
+-- Rewrites the header line (line 0) to reflect current agent state.
+-- Call after any change to a.profile, a.context_mode, or a.provider.
+function M.update_header(a)
+  if not a.buf or not vim.api.nvim_buf_is_valid(a.buf) then return end
+  with_modifiable(a.buf, function()
+    vim.api.nvim_buf_set_lines(a.buf, 0, 1, false, {
+      '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. (a.provider or 'claude'),
+    })
+  end)
+end
+
 function M.open(a, registry, context_mod)
   -- Reuse existing buffer if valid
   if a.buf and vim.api.nvim_buf_is_valid(a.buf) then
@@ -383,7 +394,7 @@ function M.open(a, registry, context_mod)
   -- Initial buffer contents
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.list_extend({
-    '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode,
+    '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. (a.provider or 'claude'),
     '',
   }, vim.list_extend(profile_warning, {
     SEPARATOR,
