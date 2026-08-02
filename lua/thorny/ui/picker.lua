@@ -49,7 +49,7 @@ function M.pick_profile(registry, on_select)
       entry_maker = function(p)
         return {
           value   = p,
-          display = p.name,
+          display = p.name .. '  [' .. (p.provider or '?') .. ']',
           ordinal = p.name,
         }
       end,
@@ -78,32 +78,6 @@ function M.pick_context_files(cwd, on_select)
       end,
     }),
     sorter = conf.file_sorter({}),
-    attach_mappings = function(prompt_bufnr)
-      actions.select_default:replace(function()
-        actions.close(prompt_bufnr)
-        local entry = action_st.get_selected_entry()
-        if entry then on_select(entry.value) end
-      end)
-      return true
-    end,
-  }):find()
-end
-
-function M.pick_provider(provider_reg, on_select)
-  local names = provider_reg.list_names()
-  if #names == 0 then
-    vim.notify('thorny: no providers registered', vim.log.levels.INFO)
-    return
-  end
-  pickers.new({}, {
-    prompt_title = 'Thorny Providers',
-    finder = finders.new_table({
-      results = names,
-      entry_maker = function(name)
-        return { value = name, display = name, ordinal = name }
-      end,
-    }),
-    sorter = conf.generic_sorter({}),
     attach_mappings = function(prompt_bufnr)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)

@@ -1,13 +1,13 @@
 local M = {}
 
-function M.new(name, persona, profile, context_mode, provider)
+function M.new(name, persona, profile, context_mode)
   assert(type(name) == 'string' and name ~= '', 'agent name must be a non-empty string')
   return {
     name           = name,
     persona        = persona or '',
     profile        = profile or 'default',
     context_mode   = context_mode or 'project',
-    provider       = provider or 'claude',
+    provider       = nil,
     history        = {},
     pending_edits  = {},
     buf            = nil,

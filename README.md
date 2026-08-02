@@ -129,12 +129,18 @@ nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedDirectory 
 
 ## ToDo
 * Project-scoped chat contexts — when opening thorny in a project, show only the agents created in that project (scoped by git root or cwd); easily browse and resume past chats per-project from a picker
+  - ThornyOpenProject opens all of the used chats in that project in a list that the user can select from.
 * Enable more providers OpenAI, as well as bespoke agents and local agents
 * Compact conext and manage context 
 * Context management (dont send the whole repo every time)
 * Context - Send needed files
 * Web search?
 * Allow agent to manipulate vim buffers. ie: Open a new buffer with example code 
+* Make tools wildely avalbile to all providers
+* Make skills widely available to all providers
+* Allow multi agent spin outs (where users could inspect those buffers if needed?)
+* Maybe have hierarchy of profiles? ( Higher level models vs lower level models to save on cost? )
+
 * Tools?
 
   - Web Search — search the internet

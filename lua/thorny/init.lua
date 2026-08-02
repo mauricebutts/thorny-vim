@@ -3,7 +3,6 @@ local M = {}
 local defaults = {
   default_profile      = 'default',
   default_context_mode = 'project',
-  default_provider     = 'claude',
   profiles_path        = vim.fn.expand('~/.config/nvim/thorny/profiles.json'),
   persist_path         = vim.fn.expand('~/.local/share/nvim/thorny'),
 }
@@ -48,7 +47,8 @@ function M.setup(config)
   -- Register commands
   vim.api.nvim_create_user_command('ThornyNew', function(opts)
     local name = opts.args ~= '' and opts.args or ('agent-' .. tostring(os.time()))
-    local a = agent_mod().new(name, '', M._config.default_profile, M._config.default_context_mode, M._config.default_provider)
+    local a = agent_mod().new(name, '', M._config.default_profile, M._config.default_context_mode)
+    registry().set_agent_profile(a, M._config.default_profile)
     registry().add_agent(a)
     chat().open(a, registry(), context())
   end, { nargs = '?' })
@@ -104,23 +104,8 @@ function M.setup(config)
     end
     picker().pick_profile(registry(), function(p3)
       registry().set_agent_profile(a, p3.name)
-      vim.notify('thorny: switched "' .. a.name .. '" to profile "' .. p3.name .. '"', vim.log.levels.INFO)
-    end)
-  end, {})
-
-  vim.api.nvim_create_user_command('ThornyProvider', function()
-    local bufnr = vim.api.nvim_get_current_buf()
-    local name  = vim.api.nvim_buf_get_name(bufnr):match('%[thorny%] (.+)')
-    local a = name and registry().get_agent(name)
-    if not a then
-      vim.notify('thorny: not a thorny buffer', vim.log.levels.WARN)
-      return
-    end
-    local provider_registry = require('thorny.provider.registry')
-    picker().pick_provider(provider_registry, function(provider_name)
-      registry().set_agent_provider(a, provider_name)
       chat().update_header(a)
-      vim.notify('thorny: switched "' .. a.name .. '" to provider "' .. provider_name .. '"', vim.log.levels.INFO)
+      vim.notify('thorny: switched "' .. a.name .. '" to profile "' .. p3.name .. '" (provider: ' .. (a.provider or 'none') .. ')', vim.log.levels.INFO)
     end)
   end, {})
 

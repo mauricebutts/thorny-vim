@@ -36,18 +36,19 @@ end
 function M.list_profiles()
   local result = {}
   for name, p in pairs(_profiles) do
-    table.insert(result, { name = name, api_key = p.api_key })
+    local entry = vim.tbl_extend('force', p, { name = name })
+    table.insert(result, entry)
   end
   return result
 end
 
 function M.set_agent_profile(a, profile_name)
   a.profile = profile_name
-end
-
-function M.set_agent_provider(a, provider_name)
-  a.provider = provider_name
-  a._cached_system = nil  -- force rebuild; different providers may format differently
+  a._cached_system = nil
+  local p = _profiles[profile_name]
+  if p and p.provider then
+    a.provider = p.provider
+  end
 end
 
 return M

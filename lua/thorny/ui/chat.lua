@@ -191,9 +191,15 @@ local function send_message(a, registry, context_mod)
   local input = read_input(a.buf)
   if input == '' then return end
 
-  local provider_mod = provider_registry.get(a.provider or 'claude')
+  if not a.provider then
+    local msg = 'no provider set — switch profile with :ThornyProfile (profile must have a "provider" field)'
+    append_history(a.buf, { '', '[thorny error] ' .. msg, '' })
+    vim.notify('thorny: ' .. msg, vim.log.levels.ERROR)
+    return
+  end
+  local provider_mod = provider_registry.get(a.provider)
   if not provider_mod then
-    local msg = 'provider "' .. (a.provider or 'claude') .. '" is not registered'
+    local msg = 'provider "' .. a.provider .. '" is not registered'
     append_history(a.buf, { '', '[thorny error] ' .. msg, '' })
     vim.notify('thorny: ' .. msg, vim.log.levels.ERROR)
     return
@@ -224,7 +230,7 @@ local function send_message(a, registry, context_mod)
   local system = a._cached_system
 
   -- Marker for the start of this response
-  local plabel = a.provider:sub(1,1):upper() .. a.provider:sub(2) .. ': '
+  local plabel = (a.provider:sub(1,1):upper() .. a.provider:sub(2)) .. ': '
   append_history(a.buf, { plabel })
 
   -- Spinner: animates the provider label line until the first token (or error) arrives
@@ -345,7 +351,7 @@ function M.update_header(a)
   if not a.buf or not vim.api.nvim_buf_is_valid(a.buf) then return end
   with_modifiable(a.buf, function()
     vim.api.nvim_buf_set_lines(a.buf, 0, 1, false, {
-      '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. a.provider,
+      '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. (a.provider or 'none'),
     })
   end)
 end
@@ -395,7 +401,7 @@ function M.open(a, registry, context_mod)
   -- Initial buffer contents
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.list_extend({
-    '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. a.provider,
+    '[thorny] ' .. a.name .. '  |  profile: ' .. a.profile .. '  |  context: ' .. a.context_mode .. '  |  provider: ' .. (a.provider or 'none'),
     '',
   }, vim.list_extend(profile_warning, {
     SEPARATOR,
