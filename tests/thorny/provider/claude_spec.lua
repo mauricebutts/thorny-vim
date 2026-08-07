@@ -57,3 +57,74 @@ describe('claude.stream() text', function()
     )
   end)
 end)
+
+describe('claude._translate_tools()', function()
+  it('renames parameters to input_schema for canonical tools', function()
+    local defs = {
+      {
+        name        = 'ReadFile',
+        description = 'Read a file.',
+        parameters  = {
+          type       = 'object',
+          properties = { file_path = { type = 'string' } },
+          required   = { 'file_path' },
+        },
+      },
+    }
+    local out = claude._translate_tools(defs)
+    assert.equals(1, #out)
+    assert.equals('ReadFile', out[1].name)
+    assert.is_not_nil(out[1].input_schema)
+    assert.is_nil(out[1].parameters)
+    assert.same(defs[1].parameters, out[1].input_schema)
+  end)
+
+  it('passes server tools through without modification', function()
+    local defs = {
+      { type = 'web_search_20260318', name = 'web_search' },
+    }
+    local out = claude._translate_tools(defs)
+    assert.equals(1, #out)
+    assert.equals('web_search_20260318', out[1].type)
+    assert.equals('web_search', out[1].name)
+    assert.is_nil(out[1].input_schema)
+  end)
+
+  it('adds cache_control to the last non-server tool only', function()
+    local defs = {
+      {
+        name        = 'ToolA',
+        description = '',
+        parameters  = { type = 'object', properties = {}, required = {} },
+      },
+      {
+        name        = 'ToolB',
+        description = '',
+        parameters  = { type = 'object', properties = {}, required = {} },
+      },
+      { type = 'web_search_20260318', name = 'web_search' },
+    }
+    local out = claude._translate_tools(defs)
+    assert.is_nil(out[1].cache_control)
+    assert.same({ type = 'ephemeral' }, out[2].cache_control)
+    assert.is_nil(out[3].cache_control)
+  end)
+
+  it('does not mutate the input definitions', function()
+    local defs = {
+      {
+        name        = 'ReadFile',
+        description = 'Read a file.',
+        parameters  = { type = 'object', properties = {}, required = {} },
+      },
+    }
+    claude._translate_tools(defs)
+    assert.is_nil(defs[1].input_schema)
+    assert.is_not_nil(defs[1].parameters)
+  end)
+
+  it('handles an empty list', function()
+    local out = claude._translate_tools({})
+    assert.same({}, out)
+  end)
+end)

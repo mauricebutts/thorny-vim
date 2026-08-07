@@ -5,6 +5,37 @@ M._curl_cmd = 'curl'
 
 local registry = require('thorny.tools.registry')
 
+-- Converts canonical thorny tool definitions to Anthropic API format.
+-- canonical: { name, description, parameters }
+-- server tools: { type, name } — passed through unchanged.
+-- Adds cache_control to the last non-server tool for Anthropic prompt caching.
+local function translate_tools(defs)
+  local out = {}
+  for _, def in ipairs(defs) do
+    if def.type then
+      -- server tool (e.g. web_search): already in Anthropic native format
+      table.insert(out, vim.deepcopy(def))
+    else
+      table.insert(out, {
+        name         = def.name,
+        description  = def.description,
+        input_schema = def.parameters,
+      })
+    end
+  end
+  -- Anthropic prompt caching: stamp the last non-server tool
+  for i = #out, 1, -1 do
+    if not out[i].type then
+      out[i].cache_control = { type = 'ephemeral' }
+      break
+    end
+  end
+  return out
+end
+
+-- Exported for tests
+M._translate_tools = translate_tools
+
 function M.stream(messages, system, tools, profile, callbacks)
   -- System prompt sent as an array so Anthropic can cache it between turns
   local system_payload = {
@@ -17,7 +48,7 @@ function M.stream(messages, system, tools, profile, callbacks)
     stream     = true,
     system     = system_payload,
     messages   = messages,
-    tools      = tools or registry.get_definitions(),
+    tools      = translate_tools(tools or registry.get_definitions()),
   })
 
   local stdout = vim.loop.new_pipe(false)
