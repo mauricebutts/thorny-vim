@@ -2,7 +2,7 @@ return {
   definition = {
     name        = 'MultiEdit',
     description = 'Apply multiple Edit operations to a single file.',
-    input_schema = {
+    parameters  = {
       type       = 'object',
       properties = {
         file_path = { type = 'string', description = 'Path to the file to edit' },

@@ -14,20 +14,11 @@ function M.register(spec)
   _tools[name] = spec
 end
 
--- Returns the definitions array sent to the Claude API.
--- Attaches cache_control to the last non-server tool so the tools list is
--- cached by Anthropic's prompt-caching layer.
+-- Returns canonical tool definitions. No provider-specific additions.
 function M.get_definitions()
   local defs = {}
   for _, name in ipairs(_order) do
     table.insert(defs, vim.deepcopy(_tools[name].definition))
-  end
-  -- Walk backwards to find the last non-server tool and mark it for caching
-  for i = #_order, 1, -1 do
-    if _tools[_order[i]].mode ~= 'server' then
-      defs[i].cache_control = { type = 'ephemeral' }
-      break
-    end
   end
   return defs
 end

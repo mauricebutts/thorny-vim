@@ -2,7 +2,7 @@ return {
   definition = {
     name        = 'Write',
     description = 'Write complete contents to a file, creating it if it does not exist.',
-    input_schema = {
+    parameters  = {
       type       = 'object',
       properties = {
         file_path = { type = 'string', description = 'Path to the file to write' },
