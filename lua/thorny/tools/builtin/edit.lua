@@ -2,7 +2,7 @@ return {
   definition = {
     name        = 'Edit',
     description = 'Replace exact text in a file. old_string must match exactly (including whitespace).',
-    input_schema = {
+    parameters  = {
       type       = 'object',
       properties = {
         file_path  = { type = 'string', description = 'Path to the file to edit' },

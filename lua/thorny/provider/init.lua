@@ -3,13 +3,22 @@
 -- stream(messages, system, tools, profile, callbacks)
 --   messages  : {role, content}[]   -- conversation history
 --   system    : string              -- system prompt (with context prepended)
---   tools     : table[]             -- Anthropic tool definitions
---   profile   : {api_key}           -- credentials
+--   tools     : table[]             -- thorny canonical tool definitions
+--                                   -- Provider must translate to its API format.
+--                                   -- Server tools (def.type present) may be
+--                                   -- passed through or skipped per provider support.
+--   profile   : table               -- provider-specific credentials (e.g. {api_key})
 --   callbacks : {
---     on_token    : function(text)
---     on_tool_use : function({id, name, input})
---     on_done     : function()
---     on_error    : function(msg)
+--     on_token     : function(text)
+--     on_tool_use  : function({id, name, input})
+--     on_tools_done: function(content_blocks)   -- all client tools done for this turn
+--     on_pause     : function(content_blocks)   -- server tool executing (optional)
+--     on_done      : function()
+--     on_error     : function(msg)
 --   }
+--
+-- Providers that support client-side tools must fire on_tools_done when a
+-- tool-use turn completes. on_pause is optional; providers without server
+-- tools never fire it.
 
 return {}
