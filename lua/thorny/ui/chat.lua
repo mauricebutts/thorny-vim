@@ -315,7 +315,7 @@ local function send_message(a, registry, context_mod)
       end
 
       if has_auto then
-        provider_mod.stream(a.history, system, nil, profile, callbacks)
+        provider_mod.stream(a.history, system, tool_registry.get_definitions(), profile, callbacks)
       else
         -- Pure pending-edit turn — wait for user to press <leader>ha
         append_history(a.buf, { '' })
@@ -328,7 +328,7 @@ local function send_message(a, registry, context_mod)
     -- tool result on the re-send, then fire the stream again.
     on_pause = function(content_blocks)
       table.insert(a.history, { role = 'assistant', content = content_blocks })
-      provider_mod.stream(a.history, system, nil, profile, callbacks)
+      provider_mod.stream(a.history, system, tool_registry.get_definitions(), profile, callbacks)
     end,
 
     on_done = function()
@@ -342,7 +342,7 @@ local function send_message(a, registry, context_mod)
       append_history(a.buf, { '[error: ' .. msg .. ']', '' })
     end,
   }
-  provider_mod.stream(a.history, system, nil, profile, callbacks)
+  provider_mod.stream(a.history, system, tool_registry.get_definitions(), profile, callbacks)
 end
 
 -- Rewrites the header line (line 0) to reflect current agent state.
