@@ -4,7 +4,6 @@ local _agents   = {}  -- name -> agent
 local _profiles = {}  -- name -> {api_key}
 
 function M.setup(profiles_map)
-  _agents   = {}
   _profiles = profiles_map or {}
 end
 
