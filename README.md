@@ -128,6 +128,7 @@ nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedDirectory 
 ```
 
 ## ToDo
+* Skill integration
 * Project-scoped chat contexts — when opening thorny in a project, show only the agents created in that project (scoped by git root or cwd); easily browse and resume past chats per-project from a picker
   - ThornyOpenProject opens all of the used chats in that project in a list that the user can select from.
 * Enable more providers OpenAI, as well as bespoke agents and local agents
@@ -140,6 +141,10 @@ nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedDirectory 
 * Make skills widely available to all providers
 * Allow multi agent spin outs (where users could inspect those buffers if needed?)
 * Maybe have hierarchy of profiles? ( Higher level models vs lower level models to save on cost? )
+* Add a voice plugin that says what is streamed to the user. Toggles on and off. `:vnoremap <silent> <leader>s :w !say -r 200<CR>`
+* Agent to agent communication ( use case I spin up an agent for a backend and frontend and they work together to deliver a feature )
+* Tool for scheduling and creating meeting invites ( google, teams )
+* Provide hook points for plugins? IE adding context to a users chat or hooking in after tool registery? Dunno if I like this though. It's nice to have a structured entry points into the flow.
 
 * Tools?
 
